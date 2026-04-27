@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ========== СВЕТЛАЯ ТЕМА ========== -->
+
+    <color name="primary">#A8D8EA</color>
+    <color name="primary_dark">#8EC8DF</color>
+    <color name="primary_light">#C5E3F0</color>
+    <color name="app_background">#C5E3F0</color>
+    <color name="surface">#D4EEF5</color>
+    <color name="surface_variant">#E0F0F8</color>
+    <color name="user_item_bg">#D4EEF5</color>
+    <color name="search_bg">#E0F0F8</color>
+    <color name="input_bg">#E0F0F8</color>
+
+    <color name="text_primary">#2C4A5A</color>
+    <color name="text_secondary">#4A6A7A</color>
+    <color name="text_hint">#7A9AAA</color>
+
+    <color name="incoming_message_bg">#D4EEF5</color>
+    <color name="outgoing_message_bg">#8EC8DF</color>
+    <color name="message_text_incoming">#2C4A5A</color>
+    <color name="message_text_outgoing">#2C4A5A</color>
+
+    <color name="send_button_bg">#8EC8DF</color>
+
+    <color name="pastel_blue">#A8D8EA</color>
+    <color name="pastel_blue_dark">#8EC8DF</color>
+    <color name="pastel_blue_light">#C5E3F0</color>
+    <color name="green">#4CAF50</color>
+    <color name="gray">#7A9AAA</color>
+    <color name="gray_light">#F5F5F5</color>
+
+    <!-- Обязательные цвета для Android -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#2C4A5A</color>
+
+    <!-- Для совместимости с тёмной темой -->
+    <color name="dark_background">#121212</color>
+    <color name="dark_surface">#1E2A32</color>
+    <color name="dark_text_primary">#FFFFFF</color>
+</resources>

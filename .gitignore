@@ -1,0 +1,4 @@
+*.hprof
+java_pid*.hprof
+/build
+.idea/

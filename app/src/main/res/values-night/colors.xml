@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ========== ТЁМНАЯ ТЕМА ========== -->
+
+    <color name="primary">#2C4A5A</color>
+    <color name="primary_dark">#1E3A4A</color>
+    <color name="primary_light">#3A5A6A</color>
+    <color name="app_background">#1E2A32</color>
+    <color name="surface">#2A3A44</color>
+    <color name="surface_variant">#3A4A54</color>
+    <color name="user_item_bg">#2A3A44</color>
+    <color name="search_bg">#2A3A44</color>
+    <color name="input_bg">#2A3A44</color>
+
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#C0C0C0</color>
+    <color name="text_hint">#A0A0A0</color>
+
+    <!-- ========== ЦВЕТА СООБЩЕНИЙ ========== -->
+    <!-- Фон чата: #1E2A32 -->
+    <!-- Чужие сообщения (светлее фона на 40%) -->
+    <color name="incoming_message_bg">#4A6A7A</color>
+    <!-- Свои сообщения (чуть светлее фона, но темнее чужих) -->
+    <color name="outgoing_message_bg">#2A3A44</color>
+
+    <color name="message_text_incoming">#FFFFFF</color>
+    <color name="message_text_outgoing">#FFFFFF</color>
+
+    <color name="send_button_bg">#3A5A6A</color>
+
+    <color name="pastel_blue">#2C4A5A</color>
+    <color name="pastel_blue_dark">#1E3A4A</color>
+    <color name="pastel_blue_light">#3A5A6A</color>
+    <color name="green">#4CAF50</color>
+    <color name="gray">#B0B0B0</color>
+    <color name="gray_light">#2A3A44</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black">#E0E0E0</color>
+
+    <color name="dark_pastel_blue">#2C4A5A</color>
+    <color name="dark_pastel_blue_dark">#1E3A4A</color>
+    <color name="dark_pastel_blue_light">#3A5A6A</color>
+    <color name="dark_background">#121212</color>
+    <color name="dark_surface">#1E2A32</color>
+    <color name="dark_surface_variant">#2A3A44</color>
+    <color name="dark_text_primary">#FFFFFF</color>
+    <color name="dark_text_secondary">#C0C0C0</color>
+    <color name="dark_text_hint">#A0A0A0</color>
+</resources>
