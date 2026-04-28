@@ -67,6 +67,7 @@ class MyApplication : Application() {
         }
     }
 
+
     private fun setUserStatus(status: String) {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         firestore.collection("users").document(userId)

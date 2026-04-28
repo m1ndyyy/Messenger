@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.yourname.messenger"
-    compileSdk = 33  // ← ИЗМЕНИ С 34 НА 33
+    compileSdk = 33
 
     defaultConfig {
         applicationId = "com.yourname.messenger"
         minSdk = 26
-        targetSdk = 33  // ← ИЗМЕНИ С 34 НА 33
+        targetSdk = 33
         versionCode = 1
         versionName = "1.0"
     }
@@ -31,7 +31,7 @@ android {
 }
 
 dependencies {
-    implementation("com.github.bumptech.glide:glide:4.16.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
     implementation("com.google.firebase:firebase-messaging-ktx:23.4.0")
     implementation("androidx.core:core-ktx:1.9.0")
@@ -43,4 +43,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.0.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // Glide (без kapt)
+    implementation("com.github.bumptech.glide:glide:4.16.0")
 }

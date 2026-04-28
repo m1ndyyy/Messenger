@@ -66,6 +66,8 @@ class ChatListActivity : AppCompatActivity() {
 
         loadUsers()
         setupSearch()
+
+        setUserStatus("online")
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -86,6 +88,7 @@ class ChatListActivity : AppCompatActivity() {
                 startActivity(Intent(this, ProfileActivity::class.java))
             }
             R.id.action_logout -> {
+                setUserStatus("offline")
                 auth.signOut()
                 startActivity(Intent(this, LoginActivity::class.java))
                 finish()
@@ -95,10 +98,10 @@ class ChatListActivity : AppCompatActivity() {
                 val isDark = !loadThemePreference()
                 if (isDark) {
                     AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-                    item.title = "Светлая тема"
+                    menu?.findItem(R.id.action_theme)?.title = "Светлая тема"
                 } else {
                     AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-                    item.title = "Тёмная тема"
+                    menu?.findItem(R.id.action_theme)?.title = "Тёмная тема"
                 }
                 saveThemePreference(isDark)
                 recreate()
@@ -115,6 +118,16 @@ class ChatListActivity : AppCompatActivity() {
     private fun loadThemePreference(): Boolean {
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
         return prefs.getBoolean("dark_theme", false)
+    }
+
+    private fun setUserStatus(status: String) {
+        val userId = auth.currentUser?.uid ?: return
+        firestore.collection("users").document(userId)
+            .update("status", status)
+            .addOnFailureListener {
+                firestore.collection("users").document(userId)
+                    .set(hashMapOf("id" to userId, "status" to status))
+            }
     }
 
     private fun loadUsers() {

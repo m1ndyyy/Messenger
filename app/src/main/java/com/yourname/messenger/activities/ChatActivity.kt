@@ -1,5 +1,7 @@
 package com.yourname.messenger.activities
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.ImageButton
@@ -14,6 +16,7 @@ import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.yourname.messenger.R
 import com.yourname.messenger.adapters.MessageAdapter
 import com.yourname.messenger.models.Message
@@ -27,12 +30,16 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var rvMessages: RecyclerView
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
+    private lateinit var btnScrollToBottom: ImageButton
     private lateinit var adapter: MessageAdapter
     private lateinit var currentChatId: String
     private lateinit var tvName: TextView
     private lateinit var tvStatus: TextView
     private lateinit var ivAvatar: ImageView
     private var wasAtBottom = true
+    private var isUserScrolling = false
+    private var isFirstLoad = true
+    private lateinit var prefs: SharedPreferences
 
     private val messagesList = mutableListOf<Message>()
     private lateinit var receiverId: String
@@ -45,12 +52,13 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
 
+        prefs = getSharedPreferences("chat_prefs", Context.MODE_PRIVATE)
+
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.title = null
         supportActionBar?.setDisplayHomeAsUpEnabled(false)
 
-        // Кастомный тулбар
         val customView = layoutInflater.inflate(R.layout.custom_toolbar_chat, null)
         ivAvatar = customView.findViewById(R.id.ivChatAvatar)
         tvName = customView.findViewById(R.id.tvChatName)
@@ -64,6 +72,7 @@ class ChatActivity : AppCompatActivity() {
         ))
 
         btnBack.setOnClickListener {
+            saveScrollPosition()
             finish()
         }
 
@@ -78,36 +87,43 @@ class ChatActivity : AppCompatActivity() {
         AppState.isChatOpen = true
         AppState.currentChatId = currentChatId
 
+        // Сохраняем currentChatId в Firestore
         firestore.collection("users").document(currentUserId)
-            .update("currentChatId", currentChatId)
+            .set(hashMapOf("currentChatId" to currentChatId), SetOptions.merge())
 
         // Загружаем данные собеседника
         firestore.collection("users").document(receiverId)
             .addSnapshotListener { snapshot, _ ->
-                val name = snapshot?.getString("name") ?: receiverName
-                val status = snapshot?.getString("status") ?: "offline"
-                val avatarUrl = snapshot?.getString("avatarUrl") ?: ""
+                if (!isFinishing && !isDestroyed) {
+                    val name = snapshot?.getString("name") ?: receiverName
+                    val status = snapshot?.getString("status") ?: "offline"
+                    val avatarUrl = snapshot?.getString("avatarUrl") ?: ""
 
-                tvName.text = name
+                    tvName.text = name
 
-                if (status == "online") {
-                    tvStatus.text = "🟢 Онлайн"
-                    tvStatus.setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.holo_green_light))
-                } else {
-                    tvStatus.text = "⚫ Оффлайн"
-                    tvStatus.setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.darker_gray))
-                }
+                    if (status == "online") {
+                        tvStatus.text = "🟢 Онлайн"
+                        tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_light))
+                    } else {
+                        tvStatus.text = "⚫ Оффлайн"
+                        tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+                    }
 
-                if (avatarUrl.isNotEmpty()) {
-                    Glide.with(this).load(avatarUrl).circleCrop().into(ivAvatar)
-                } else {
-                    ivAvatar.setImageResource(R.drawable.ic_default_avatar)
+                    if (avatarUrl.isNotEmpty()) {
+                        Glide.with(this)
+                            .load(avatarUrl)
+                            .circleCrop()
+                            .into(ivAvatar)
+                    } else {
+                        ivAvatar.setImageResource(R.drawable.ic_default_avatar)
+                    }
                 }
             }
 
         rvMessages = findViewById(R.id.rvMessages)
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
+        btnScrollToBottom = findViewById(R.id.btnScrollToBottom)
 
         rvMessages.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messagesList, currentUserId)
@@ -115,10 +131,21 @@ class ChatActivity : AppCompatActivity() {
 
         loadMessages()
 
+        // СЛУШАТЕЛЬ ДЛЯ СТРЕЛКИ
         rvMessages.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
-                markVisibleMessagesAsRead()
+                isUserScrolling = true
+
+                val layoutManager = rvMessages.layoutManager as LinearLayoutManager
+                val lastVisible = layoutManager.findLastVisibleItemPosition()
+                val isAtBottom = lastVisible >= messagesList.size - 1
+
+                if (isAtBottom) {
+                    btnScrollToBottom.visibility = android.view.View.GONE
+                } else {
+                    btnScrollToBottom.visibility = android.view.View.VISIBLE
+                }
             }
 
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -126,13 +153,49 @@ class ChatActivity : AppCompatActivity() {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     markVisibleMessagesAsRead()
                     checkIfAtBottom()
+                    isUserScrolling = false
+                    // Сохраняем позицию при остановке скролла
+                    saveScrollPosition()
                 }
             }
         })
 
+        btnScrollToBottom.setOnClickListener {
+            if (messagesList.isNotEmpty()) {
+                rvMessages.smoothScrollToPosition(messagesList.size - 1)
+                btnScrollToBottom.visibility = android.view.View.GONE
+            }
+        }
+
         btnSend.setOnClickListener {
             sendMessage()
         }
+    }
+
+    private fun saveScrollPosition() {
+        val layoutManager = rvMessages.layoutManager as LinearLayoutManager
+        val position = layoutManager.findFirstVisibleItemPosition()
+        val firstView = rvMessages.getChildAt(0)
+        val offset = if (firstView != null) firstView.top - layoutManager.paddingTop else 0
+
+        prefs.edit().apply {
+            putInt("${currentChatId}_position", position)
+            putInt("${currentChatId}_offset", offset)
+            apply()
+        }
+    }
+
+    private fun getSavedPosition(): Int {
+        return prefs.getInt("${currentChatId}_position", -1)
+    }
+
+    private fun getSavedOffset(): Int {
+        return prefs.getInt("${currentChatId}_offset", 0)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveScrollPosition()
     }
 
     private fun loadMessages() {
@@ -146,6 +209,7 @@ class ChatActivity : AppCompatActivity() {
                 if (snapshot == null) return@addSnapshotListener
 
                 val wasAtBottomBefore = wasAtBottom
+                val oldSize = messagesList.size
 
                 messagesList.clear()
                 snapshot.documents.forEach { doc ->
@@ -155,12 +219,35 @@ class ChatActivity : AppCompatActivity() {
 
                 adapter.updateMessages(messagesList.toList())
 
-                if (wasAtBottomBefore && messagesList.isNotEmpty()) {
-                    rvMessages.scrollToPosition(messagesList.size - 1)
+                if (isFirstLoad && messagesList.isNotEmpty()) {
+                    val savedPosition = getSavedPosition()
+                    val savedOffset = getSavedOffset()
+
+                    // Если есть сохраненная позиция и она валидна
+                    if (savedPosition != -1 && savedPosition < messagesList.size) {
+                        rvMessages.layoutManager?.scrollToPosition(savedPosition)
+                        rvMessages.post {
+                            val layoutManager = rvMessages.layoutManager as LinearLayoutManager
+                            if (savedPosition >= 0 && savedPosition < messagesList.size) {
+                                layoutManager.scrollToPositionWithOffset(savedPosition, savedOffset)
+                            }
+                        }
+                    } else {
+                        // Нет сохраненной позиции - скроллим вниз
+                        rvMessages.scrollToPosition(messagesList.size - 1)
+                    }
+                    isFirstLoad = false
+                } else {
+                    // Обычное поведение: прокручиваем только если пользователь был внизу
+                    if (wasAtBottomBefore && messagesList.size > oldSize && messagesList.isNotEmpty()) {
+                        rvMessages.scrollToPosition(messagesList.size - 1)
+                        btnScrollToBottom.visibility = android.view.View.GONE
+                    }
                 }
 
                 rvMessages.post {
                     markVisibleMessagesAsRead()
+                    checkIfAtBottom()
                 }
             }
     }
@@ -220,7 +307,10 @@ class ChatActivity : AppCompatActivity() {
             .set(messageMap)
             .addOnSuccessListener {
                 etMessage.text.clear()
-                rvMessages.scrollToPosition(messagesList.size)
+                if (wasAtBottom) {
+                    rvMessages.scrollToPosition(messagesList.size)
+                    btnScrollToBottom.visibility = android.view.View.GONE
+                }
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Ошибка отправки", Toast.LENGTH_SHORT).show()

@@ -72,9 +72,19 @@ class UserAdapter(
         fun bind(user: User) {
             tvName.text = user.name
 
-            // Загрузка аватарки
+            // ЗАГРУЗКА АВАТАРКИ (ПРОСТАЯ РАБОЧАЯ ВЕРСИЯ)
             if (user.avatarUrl.isNotEmpty()) {
-                Glide.with(itemView.context).load(user.avatarUrl).circleCrop().into(ivAvatar)
+                try {
+                    val urlWithTimestamp = user.avatarUrl + "?t=" + System.currentTimeMillis()
+                    Glide.with(itemView.context)
+                        .load(urlWithTimestamp)
+                        .circleCrop()
+                        .placeholder(R.drawable.ic_default_avatar)
+                        .error(R.drawable.ic_default_avatar)
+                        .into(ivAvatar)
+                } catch (e: Exception) {
+                    ivAvatar.setImageResource(R.drawable.ic_default_avatar)
+                }
             } else {
                 ivAvatar.setImageResource(R.drawable.ic_default_avatar)
             }

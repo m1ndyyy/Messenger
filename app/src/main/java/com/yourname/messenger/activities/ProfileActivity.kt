@@ -17,15 +17,17 @@ import androidx.core.content.ContextCompat
 import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
 import com.yourname.messenger.R
-import java.util.UUID
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.io.IOException
 
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var auth: FirebaseAuth
     private lateinit var firestore: FirebaseFirestore
-    private lateinit var storage: FirebaseStorage
 
     private lateinit var ivAvatar: ImageView
     private lateinit var tvEmail: TextView
@@ -49,7 +51,6 @@ class ProfileActivity : AppCompatActivity() {
 
         auth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
-        storage = FirebaseStorage.getInstance()
 
         ivAvatar = findViewById(R.id.ivAvatar)
         tvEmail = findViewById(R.id.tvEmail)
@@ -66,14 +67,10 @@ class ProfileActivity : AppCompatActivity() {
         loadUserData()
 
         btnSave.setOnClickListener {
-            if (!isUploading) {
-                if (selectedImageUri != null) {
-                    uploadAvatarAndSave()
-                } else {
-                    saveUserName()
-                }
+            if (selectedImageUri != null && !isUploading) {
+                uploadAvatarToImgBB()
             } else {
-                Toast.makeText(this, "Подождите, идёт загрузка...", Toast.LENGTH_SHORT).show()
+                saveUserName()
             }
         }
     }
@@ -115,39 +112,98 @@ class ProfileActivity : AppCompatActivity() {
                 etName.setText(name)
 
                 if (avatarUrl.isNotEmpty()) {
-                    Glide.with(this).load(avatarUrl).circleCrop().into(ivAvatar)
+                    Glide.with(this)
+                        .load(avatarUrl)
+                        .circleCrop()
+                        .into(ivAvatar)
                 }
             }
     }
 
-    private fun uploadAvatarAndSave() {
+    private fun uploadAvatarToImgBB() {
         isUploading = true
         btnSave.isEnabled = false
+        Toast.makeText(this, "Загрузка...", Toast.LENGTH_SHORT).show()
 
-        val userId = auth.currentUser?.uid ?: return
-        val imageRef = storage.reference.child("avatars/${userId}_${UUID.randomUUID()}.jpg")
+        val stream = contentResolver.openInputStream(selectedImageUri!!)
+        val bytes = stream?.readBytes()
+        stream?.close()
 
-        imageRef.putFile(selectedImageUri!!)
-            .addOnSuccessListener {
-                imageRef.downloadUrl.addOnSuccessListener { uri ->
-                    val avatarUrl = uri.toString()
-                    firestore.collection("users").document(userId)
-                        .update("avatarUrl", avatarUrl)
-                        .addOnSuccessListener {
-                            Toast.makeText(this, "Аватар обновлён!", Toast.LENGTH_SHORT).show()
-                            saveUserName()
-                        }
-                        .addOnFailureListener { e ->
-                            Toast.makeText(this, "Ошибка сохранения: ${e.message}", Toast.LENGTH_SHORT).show()
-                            saveUserName()
-                        }
-                }
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Ошибка загрузки: ${e.message}", Toast.LENGTH_SHORT).show()
+        if (bytes == null) {
+            runOnUiThread {
+                Toast.makeText(this, "Ошибка чтения файла", Toast.LENGTH_SHORT).show()
                 isUploading = false
                 btnSave.isEnabled = true
             }
+            return
+        }
+
+        val API_KEY = "4941164819b8858f8af559fcf36dcd24"
+
+        val base64Image = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("image", base64Image)
+            .build()
+
+        val request = Request.Builder()
+            .url("https://api.imgbb.com/1/upload?key=$API_KEY")
+            .post(requestBody)
+            .build()
+
+        OkHttpClient().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                runOnUiThread {
+                    Toast.makeText(this@ProfileActivity, "Ошибка сети: ${e.message}", Toast.LENGTH_SHORT).show()
+                    isUploading = false
+                    btnSave.isEnabled = true
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val responseBody = response.body?.string()
+                if (response.isSuccessful && responseBody != null) {
+                    try {
+                        val json = JSONObject(responseBody)
+                        val imageUrl = json.getJSONObject("data").getString("url")
+
+                        val userId = auth.currentUser?.uid ?: return
+                        firestore.collection("users").document(userId)
+                            .update("avatarUrl", imageUrl)
+                            .addOnSuccessListener {
+                                runOnUiThread {
+                                    Toast.makeText(this@ProfileActivity, "Аватар обновлён!", Toast.LENGTH_SHORT).show()
+                                    Glide.with(this@ProfileActivity)
+                                        .load(imageUrl)
+                                        .circleCrop()
+                                        .into(ivAvatar)
+                                    saveUserName()
+                                }
+                            }
+                            .addOnFailureListener {
+                                runOnUiThread {
+                                    Toast.makeText(this@ProfileActivity, "Ошибка сохранения", Toast.LENGTH_SHORT).show()
+                                    isUploading = false
+                                    btnSave.isEnabled = true
+                                }
+                            }
+                    } catch (e: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this@ProfileActivity, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                            isUploading = false
+                            btnSave.isEnabled = true
+                        }
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@ProfileActivity, "Ошибка загрузки ${response.code}", Toast.LENGTH_SHORT).show()
+                        isUploading = false
+                        btnSave.isEnabled = true
+                    }
+                }
+            }
+        })
     }
 
     private fun saveUserName() {

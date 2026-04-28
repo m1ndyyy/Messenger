@@ -62,6 +62,7 @@
 
     </LinearLayout>
 
+    <!-- СТРЕЛОЧКА ДЛЯ ПРОКРУТКИ ВНИЗ -->
     <ImageButton
         android:id="@+id/btnScrollToBottom"
         android:layout_width="48dp"
