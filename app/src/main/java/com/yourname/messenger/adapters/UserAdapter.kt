@@ -9,7 +9,6 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
 import com.yourname.messenger.R
 import com.yourname.messenger.models.User
 import java.text.SimpleDateFormat
@@ -41,12 +40,19 @@ class UserAdapter(
 
     private fun formatTime(timestamp: Timestamp): String {
         val date = timestamp.toDate()
-        val now = Date()
-        return if (date.date == now.date && date.month == now.month && date.year == now.year) {
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+        val calendar = Calendar.getInstance()
+        calendar.time = date
+        val now = Calendar.getInstance()
+
+        val isToday = calendar.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
+                calendar.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
+
+        val sdf = if (isToday) {
+            SimpleDateFormat("HH:mm", Locale.getDefault())
         } else {
-            SimpleDateFormat("dd.MM", Locale.getDefault()).format(date)
+            SimpleDateFormat("dd.MM", Locale.getDefault())
         }
+        return sdf.format(date)
     }
 
     inner class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -55,8 +61,6 @@ class UserAdapter(
         private val tvLastMessage: TextView = itemView.findViewById(R.id.tvLastMessage)
         private val tvCheck: TextView = itemView.findViewById(R.id.tvCheck)
         private val tvTime: TextView = itemView.findViewById(R.id.tvTime)
-
-        private var lastMessageListener: ListenerRegistration? = null
 
         fun bind(user: User) {
             tvName.text = user.name
@@ -74,27 +78,21 @@ class UserAdapter(
                     }
                 }
 
-            // СЛУШАЕМ ПОСЛЕДНЕЕ СООБЩЕНИЕ В РЕАЛЬНОМ ВРЕМЕНИ
-            subscribeToLastMessage(user)
+            // Загружаем последнее сообщение
+            loadLastMessage(user)
 
             itemView.setOnClickListener { onUserClick(user) }
         }
 
-        private fun subscribeToLastMessage(user: User) {
+        private fun loadLastMessage(user: User) {
             val chatId = if (currentUserId < user.id) "$currentUserId-${user.id}" else "${user.id}-$currentUserId"
 
-            // Удаляем старый слушатель
-            lastMessageListener?.remove()
-
-            // Подписываемся на изменения в реальном времени
-            lastMessageListener = firestore.collection("chats")
+            firestore.collection("chats")
                 .document(chatId)
                 .collection("messages")
                 .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
                 .limit(1)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) return@addSnapshotListener
-
+                .addSnapshotListener { snapshot, _ ->
                     val docs = snapshot?.documents
                     if (docs.isNullOrEmpty()) {
                         tvLastMessage.text = "Нет сообщений"
@@ -117,7 +115,6 @@ class UserAdapter(
                         tvTime.text = ""
                     }
 
-                    // Галочка только для своих сообщений
                     if (sender == currentUserId) {
                         tvCheck.text = if (isRead) "✓✓" else "✓"
                         tvCheck.setTextColor(Color.parseColor("#4CAF50"))
@@ -126,14 +123,5 @@ class UserAdapter(
                     }
                 }
         }
-
-        fun unbind() {
-            lastMessageListener?.remove()
-        }
-    }
-
-    override fun onViewRecycled(holder: UserViewHolder) {
-        super.onViewRecycled(holder)
-        holder.unbind()
     }
 }

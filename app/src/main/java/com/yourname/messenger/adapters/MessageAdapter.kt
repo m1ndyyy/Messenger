@@ -58,7 +58,8 @@ class MessageAdapter(
     private fun formatTime(timestamp: Any?): String {
         if (timestamp == null) return "..."
         return try {
-            val date = (timestamp as Timestamp).toDate()
+            val ts = timestamp as Timestamp
+            val date = ts.toDate()
             SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
         } catch (e: Exception) {
             "..."
@@ -83,14 +84,8 @@ class MessageAdapter(
         fun bind(message: Message) {
             tvMessage.text = message.text
             tvTime.text = formatTime(message.timestamp)
-
-            if (message.isRead) {
-                tvStatus.text = "✓✓"
-                tvStatus.setTextColor(Color.parseColor("#4CAF50"))
-            } else {
-                tvStatus.text = "✓"
-                tvStatus.setTextColor(Color.parseColor("#9E9E9E"))
-            }
+            tvStatus.text = if (message.isRead) "✓✓" else "✓"
+            tvStatus.setTextColor(if (message.isRead) Color.parseColor("#4CAF50") else Color.parseColor("#9E9E9E"))
         }
     }
 }

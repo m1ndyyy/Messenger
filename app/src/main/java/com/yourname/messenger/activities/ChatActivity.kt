@@ -3,8 +3,10 @@ package com.yourname.messenger.activities
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
@@ -13,6 +15,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.yourname.messenger.R
 import com.yourname.messenger.adapters.MessageAdapter
 import com.yourname.messenger.models.Message
+import com.yourname.messenger.utils.AppState
 import java.util.*
 
 class ChatActivity : AppCompatActivity() {
@@ -22,12 +25,18 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var rvMessages: RecyclerView
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
+    private var btnScrollToBottom: ImageButton? = null  // Может быть null
     private lateinit var adapter: MessageAdapter
+    private lateinit var currentChatId: String
+    private lateinit var tvStatus: TextView
+    private var wasAtBottom = true
 
     private val messagesList = mutableListOf<Message>()
     private lateinit var receiverId: String
     private lateinit var receiverName: String
     private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    private val markedAsRead = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +44,19 @@ class ChatActivity : AppCompatActivity() {
 
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
+        supportActionBar?.title = ""
+
+        tvStatus = TextView(this).apply {
+            text = "Онлайн"
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.white))
+        }
+        toolbar.addView(tvStatus, androidx.appcompat.widget.Toolbar.LayoutParams(
+            androidx.appcompat.widget.Toolbar.LayoutParams.WRAP_CONTENT,
+            androidx.appcompat.widget.Toolbar.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = android.view.Gravity.CENTER
+        })
 
         receiverId = intent.getStringExtra("receiverId") ?: ""
         receiverName = intent.getStringExtra("receiverName") ?: "Пользователь"
@@ -45,9 +67,33 @@ class ChatActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
 
+        currentChatId = if (currentUserId < receiverId) "$currentUserId-$receiverId" else "$receiverId-$currentUserId"
+
+        AppState.isChatOpen = true
+        AppState.currentChatId = currentChatId
+
+        firestore.collection("users").document(currentUserId)
+            .update("currentChatId", currentChatId)
+
+        // Слушаем статус собеседника
+        firestore.collection("users").document(receiverId)
+            .addSnapshotListener { snapshot, _ ->
+                val status = snapshot?.getString("status") ?: "offline"
+                if (status == "online") {
+                    tvStatus.text = "🟢 Онлайн"
+                    tvStatus.setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.holo_green_light))
+                } else {
+                    tvStatus.text = "⚫ Оффлайн"
+                    tvStatus.setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.darker_gray))
+                }
+            }
+
         rvMessages = findViewById(R.id.rvMessages)
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
+
+        // БЕЗОПАСНО — если кнопки нет в layout, будет null
+        btnScrollToBottom = findViewById(R.id.btnScrollToBottom)
 
         rvMessages.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messagesList, currentUserId)
@@ -55,15 +101,38 @@ class ChatActivity : AppCompatActivity() {
 
         loadMessages()
 
+        rvMessages.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                markVisibleMessagesAsRead()
+
+                val layoutManager = rvMessages.layoutManager as LinearLayoutManager
+                val lastVisible = layoutManager.findLastVisibleItemPosition()
+                val isAtBottom = lastVisible >= messagesList.size - 1
+
+                btnScrollToBottom?.visibility = if (isAtBottom) android.view.View.GONE else android.view.View.VISIBLE
+            }
+
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    markVisibleMessagesAsRead()
+                    checkIfAtBottom()
+                }
+            }
+        })
+
+        // БЕЗОПАСНО — только если кнопка существует
+        btnScrollToBottom?.setOnClickListener {
+            if (messagesList.isNotEmpty()) {
+                rvMessages.smoothScrollToPosition(messagesList.size - 1)
+                btnScrollToBottom?.visibility = android.view.View.GONE
+            }
+        }
+
         btnSend.setOnClickListener {
             sendMessage()
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        val chatId = if (currentUserId < receiverId) "$currentUserId-$receiverId" else "$receiverId-$currentUserId"
-        markMessagesAsRead(chatId)
     }
 
     private fun loadMessages() {
@@ -76,6 +145,8 @@ class ChatActivity : AppCompatActivity() {
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot == null) return@addSnapshotListener
 
+                val wasAtBottomBefore = wasAtBottom
+
                 messagesList.clear()
                 snapshot.documents.forEach { doc ->
                     val message = doc.toObject(Message::class.java)
@@ -84,10 +155,47 @@ class ChatActivity : AppCompatActivity() {
 
                 adapter.updateMessages(messagesList.toList())
 
-                if (messagesList.isNotEmpty()) {
+                if (wasAtBottomBefore && messagesList.isNotEmpty()) {
                     rvMessages.scrollToPosition(messagesList.size - 1)
+                    btnScrollToBottom?.visibility = android.view.View.GONE
+                }
+
+                rvMessages.post {
+                    markVisibleMessagesAsRead()
                 }
             }
+    }
+
+    private fun checkIfAtBottom() {
+        if (rvMessages.layoutManager == null) return
+        val layoutManager = rvMessages.layoutManager as LinearLayoutManager
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
+        wasAtBottom = lastVisible >= messagesList.size - 1
+    }
+
+    private fun markVisibleMessagesAsRead() {
+        val layoutManager = rvMessages.layoutManager as LinearLayoutManager
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
+
+        if (firstVisible == -1) return
+
+        for (i in firstVisible..lastVisible) {
+            val message = messagesList.getOrNull(i) ?: continue
+            if (message.receiverId == currentUserId && !message.isRead && !markedAsRead.contains(message.id)) {
+                markedAsRead.add(message.id)
+                markSingleMessageAsRead(message.id)
+            }
+        }
+    }
+
+    private fun markSingleMessageAsRead(messageId: String) {
+        val chatId = if (currentUserId < receiverId) "$currentUserId-$receiverId" else "$receiverId-$currentUserId"
+        firestore.collection("chats")
+            .document(chatId)
+            .collection("messages")
+            .document(messageId)
+            .update("isRead", true)
     }
 
     private fun sendMessage() {
@@ -113,23 +221,19 @@ class ChatActivity : AppCompatActivity() {
             .set(messageMap)
             .addOnSuccessListener {
                 etMessage.text.clear()
+                rvMessages.scrollToPosition(messagesList.size)
+                btnScrollToBottom?.visibility = android.view.View.GONE
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Ошибка отправки", Toast.LENGTH_SHORT).show()
             }
     }
 
-    private fun markMessagesAsRead(chatId: String) {
-        firestore.collection("chats")
-            .document(chatId)
-            .collection("messages")
-            .whereEqualTo("receiverId", currentUserId)
-            .whereEqualTo("isRead", false)
-            .get()
-            .addOnSuccessListener { documents ->
-                for (doc in documents) {
-                    doc.reference.update("isRead", true)
-                }
-            }
+    override fun onDestroy() {
+        super.onDestroy()
+        AppState.isChatOpen = false
+        AppState.currentChatId = ""
+        firestore.collection("users").document(currentUserId)
+            .update("currentChatId", FieldValue.delete())
     }
 }
