@@ -11,7 +11,7 @@
         android:label="Messenger"
         android:theme="@style/Theme.Messenger">
 
-        <!-- СЕРВИС УВЕДОМЛЕНИЙ -->
+        <!-- Сервис уведомлений -->
         <service
             android:name=".services.MyFirebaseMessagingService"
             android:exported="false">
@@ -20,7 +20,7 @@
             </intent-filter>
         </service>
 
-        <!-- МЕТАДАННЫЕ ДЛЯ УВЕДОМЛЕНИЙ -->
+        <!-- Метаданные для уведомлений -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_notification" />
@@ -31,6 +31,7 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="messages_channel" />
 
+        <!-- LoginActivity (главный экран) -->
         <activity
             android:name=".activities.LoginActivity"
             android:exported="true">
@@ -40,12 +41,19 @@
             </intent-filter>
         </activity>
 
+        <!-- ChatListActivity -->
         <activity
             android:name=".activities.ChatListActivity"
             android:exported="false" />
 
+        <!-- ChatActivity -->
         <activity
             android:name=".activities.ChatActivity"
+            android:exported="false" />
+
+        <!-- ProfileActivity -->
+        <activity
+            android:name=".activities.ProfileActivity"
             android:exported="false" />
 
     </application>

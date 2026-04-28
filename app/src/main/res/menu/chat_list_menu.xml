@@ -3,6 +3,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_profile"
+        android:title="Профиль"
+        app:showAsAction="never"/>
+
+    <item
         android:id="@+id/action_theme"
         android:title="Тёмная тема"
         app:showAsAction="never"/>

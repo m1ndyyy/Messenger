@@ -34,7 +34,6 @@ class ChatListActivity : AppCompatActivity() {
         get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Загружаем настройку темы
         val isDark = loadThemePreference()
         if (isDark) {
             AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
@@ -83,6 +82,9 @@ class ChatListActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.action_profile -> {
+                startActivity(Intent(this, ProfileActivity::class.java))
+            }
             R.id.action_logout -> {
                 auth.signOut()
                 startActivity(Intent(this, LoginActivity::class.java))
