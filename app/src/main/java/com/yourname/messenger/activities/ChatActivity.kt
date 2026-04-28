@@ -3,12 +3,14 @@ package com.yourname.messenger.activities
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -25,10 +27,11 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var rvMessages: RecyclerView
     private lateinit var etMessage: EditText
     private lateinit var btnSend: ImageButton
-    private var btnScrollToBottom: ImageButton? = null  // Может быть null
     private lateinit var adapter: MessageAdapter
     private lateinit var currentChatId: String
+    private lateinit var tvName: TextView
     private lateinit var tvStatus: TextView
+    private lateinit var ivAvatar: ImageView
     private var wasAtBottom = true
 
     private val messagesList = mutableListOf<Message>()
@@ -44,25 +47,28 @@ class ChatActivity : AppCompatActivity() {
 
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
-        supportActionBar?.title = ""
+        supportActionBar?.title = null
+        supportActionBar?.setDisplayHomeAsUpEnabled(false)
 
-        tvStatus = TextView(this).apply {
-            text = "Онлайн"
-            textSize = 12f
-            setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.white))
+        // Кастомный тулбар
+        val customView = layoutInflater.inflate(R.layout.custom_toolbar_chat, null)
+        ivAvatar = customView.findViewById(R.id.ivChatAvatar)
+        tvName = customView.findViewById(R.id.tvChatName)
+        tvStatus = customView.findViewById(R.id.tvChatStatus)
+        val btnBack = customView.findViewById<ImageButton>(R.id.btnChatBack)
+
+        toolbar.removeAllViews()
+        toolbar.addView(customView, androidx.appcompat.widget.Toolbar.LayoutParams(
+            androidx.appcompat.widget.Toolbar.LayoutParams.MATCH_PARENT,
+            androidx.appcompat.widget.Toolbar.LayoutParams.MATCH_PARENT
+        ))
+
+        btnBack.setOnClickListener {
+            finish()
         }
-        toolbar.addView(tvStatus, androidx.appcompat.widget.Toolbar.LayoutParams(
-            androidx.appcompat.widget.Toolbar.LayoutParams.WRAP_CONTENT,
-            androidx.appcompat.widget.Toolbar.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = android.view.Gravity.CENTER
-        })
 
         receiverId = intent.getStringExtra("receiverId") ?: ""
         receiverName = intent.getStringExtra("receiverName") ?: "Пользователь"
-        supportActionBar?.title = receiverName
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener { finish() }
 
         auth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
@@ -75,10 +81,15 @@ class ChatActivity : AppCompatActivity() {
         firestore.collection("users").document(currentUserId)
             .update("currentChatId", currentChatId)
 
-        // Слушаем статус собеседника
+        // Загружаем данные собеседника
         firestore.collection("users").document(receiverId)
             .addSnapshotListener { snapshot, _ ->
+                val name = snapshot?.getString("name") ?: receiverName
                 val status = snapshot?.getString("status") ?: "offline"
+                val avatarUrl = snapshot?.getString("avatarUrl") ?: ""
+
+                tvName.text = name
+
                 if (status == "online") {
                     tvStatus.text = "🟢 Онлайн"
                     tvStatus.setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.holo_green_light))
@@ -86,14 +97,17 @@ class ChatActivity : AppCompatActivity() {
                     tvStatus.text = "⚫ Оффлайн"
                     tvStatus.setTextColor(ContextCompat.getColor(this@ChatActivity, android.R.color.darker_gray))
                 }
+
+                if (avatarUrl.isNotEmpty()) {
+                    Glide.with(this).load(avatarUrl).circleCrop().into(ivAvatar)
+                } else {
+                    ivAvatar.setImageResource(R.drawable.ic_default_avatar)
+                }
             }
 
         rvMessages = findViewById(R.id.rvMessages)
         etMessage = findViewById(R.id.etMessage)
         btnSend = findViewById(R.id.btnSend)
-
-        // БЕЗОПАСНО — если кнопки нет в layout, будет null
-        btnScrollToBottom = findViewById(R.id.btnScrollToBottom)
 
         rvMessages.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messagesList, currentUserId)
@@ -105,12 +119,6 @@ class ChatActivity : AppCompatActivity() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 markVisibleMessagesAsRead()
-
-                val layoutManager = rvMessages.layoutManager as LinearLayoutManager
-                val lastVisible = layoutManager.findLastVisibleItemPosition()
-                val isAtBottom = lastVisible >= messagesList.size - 1
-
-                btnScrollToBottom?.visibility = if (isAtBottom) android.view.View.GONE else android.view.View.VISIBLE
             }
 
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -121,14 +129,6 @@ class ChatActivity : AppCompatActivity() {
                 }
             }
         })
-
-        // БЕЗОПАСНО — только если кнопка существует
-        btnScrollToBottom?.setOnClickListener {
-            if (messagesList.isNotEmpty()) {
-                rvMessages.smoothScrollToPosition(messagesList.size - 1)
-                btnScrollToBottom?.visibility = android.view.View.GONE
-            }
-        }
 
         btnSend.setOnClickListener {
             sendMessage()
@@ -157,7 +157,6 @@ class ChatActivity : AppCompatActivity() {
 
                 if (wasAtBottomBefore && messagesList.isNotEmpty()) {
                     rvMessages.scrollToPosition(messagesList.size - 1)
-                    btnScrollToBottom?.visibility = android.view.View.GONE
                 }
 
                 rvMessages.post {
@@ -222,7 +221,6 @@ class ChatActivity : AppCompatActivity() {
             .addOnSuccessListener {
                 etMessage.text.clear()
                 rvMessages.scrollToPosition(messagesList.size)
-                btnScrollToBottom?.visibility = android.view.View.GONE
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Ошибка отправки", Toast.LENGTH_SHORT).show()

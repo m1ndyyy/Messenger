@@ -4,8 +4,10 @@ import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -56,6 +58,7 @@ class UserAdapter(
     }
 
     inner class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val ivAvatar: ImageView = itemView.findViewById(R.id.ivAvatar)
         private val tvName: TextView = itemView.findViewById(R.id.tvName)
         private val tvStatus: TextView = itemView.findViewById(R.id.tvStatus)
         private val tvLastMessage: TextView = itemView.findViewById(R.id.tvLastMessage)
@@ -68,6 +71,13 @@ class UserAdapter(
 
         fun bind(user: User) {
             tvName.text = user.name
+
+            // Загрузка аватарки
+            if (user.avatarUrl.isNotEmpty()) {
+                Glide.with(itemView.context).load(user.avatarUrl).circleCrop().into(ivAvatar)
+            } else {
+                ivAvatar.setImageResource(R.drawable.ic_default_avatar)
+            }
 
             // Статус онлайн/оффлайн
             firestore.collection("users").document(user.id)
@@ -146,8 +156,11 @@ class UserAdapter(
                     if (sender == currentUserId) {
                         tvCheck.text = if (isRead) "✓✓" else "✓"
                         tvCheck.setTextColor(Color.parseColor("#4CAF50"))
+                        tvCheck.visibility = View.VISIBLE
+                        tvUnreadCount.visibility = View.GONE
                     } else {
                         tvCheck.text = ""
+                        tvCheck.visibility = View.GONE
                     }
                 }
         }

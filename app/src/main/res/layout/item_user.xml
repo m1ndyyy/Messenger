@@ -7,6 +7,15 @@
     android:background="@drawable/bg_user_item"
     android:layout_margin="8dp">
 
+    <!-- Аватар -->
+    <ImageView
+        android:id="@+id/ivAvatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_default_avatar"
+        android:background="@drawable/bg_avatar_small"
+        android:layout_marginEnd="12dp"/>
+
     <!-- Левая часть -->
     <LinearLayout
         android:layout_width="0dp"
@@ -70,16 +79,17 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp">
 
-            <!-- Галочка (видна всегда для своих сообщений) -->
+            <!-- Галочка (для своих сообщений) -->
             <TextView
                 android:id="@+id/tvCheck"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text=""
                 android:textSize="12sp"
-                android:textColor="@color/green"/>
+                android:textColor="@color/green"
+                android:visibility="gone"/>
 
-            <!-- Кружок (появляется только для чужих непрочитанных) -->
+            <!-- Кружок для непрочитанных -->
             <TextView
                 android:id="@+id/tvUnreadCount"
                 android:layout_width="wrap_content"

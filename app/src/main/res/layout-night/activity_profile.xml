@@ -5,7 +5,7 @@
     android:orientation="vertical"
     android:background="@color/primary_light">
 
-    <!-- Верхняя панель с кнопкой назад -->
+    <!-- Верхняя панель -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -40,7 +40,28 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <!-- Аватар (кликабельный) -->
+            <ImageView
+                android:id="@+id/ivAvatar"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@drawable/ic_default_avatar"
+                android:background="@drawable/bg_avatar"
+                android:clickable="true"
+                android:focusable="true"
+                android:elevation="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Нажмите для смены фото"
+                android:textSize="12sp"
+                android:textColor="@color/text_hint"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="24dp"/>
 
             <TextView
                 android:layout_width="wrap_content"
