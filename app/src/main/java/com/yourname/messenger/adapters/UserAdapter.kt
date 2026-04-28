@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.yourname.messenger.R
 import com.yourname.messenger.models.User
 import java.text.SimpleDateFormat
@@ -47,12 +48,11 @@ class UserAdapter(
         val isToday = calendar.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
                 calendar.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
 
-        val sdf = if (isToday) {
-            SimpleDateFormat("HH:mm", Locale.getDefault())
+        return if (isToday) {
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
         } else {
-            SimpleDateFormat("dd.MM", Locale.getDefault())
+            SimpleDateFormat("dd.MM", Locale.getDefault()).format(date)
         }
-        return sdf.format(date)
     }
 
     inner class UserViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -61,6 +61,10 @@ class UserAdapter(
         private val tvLastMessage: TextView = itemView.findViewById(R.id.tvLastMessage)
         private val tvCheck: TextView = itemView.findViewById(R.id.tvCheck)
         private val tvTime: TextView = itemView.findViewById(R.id.tvTime)
+        private val tvUnreadCount: TextView = itemView.findViewById(R.id.tvUnreadCount)
+
+        private var lastMessageListener: ListenerRegistration? = null
+        private var unreadListener: ListenerRegistration? = null
 
         fun bind(user: User) {
             tvName.text = user.name
@@ -80,14 +84,38 @@ class UserAdapter(
 
             // Загружаем последнее сообщение
             loadLastMessage(user)
+            // Загружаем количество непрочитанных
+            loadUnreadCount(user)
 
             itemView.setOnClickListener { onUserClick(user) }
+        }
+
+        private fun loadUnreadCount(user: User) {
+            val chatId = if (currentUserId < user.id) "$currentUserId-${user.id}" else "${user.id}-$currentUserId"
+
+            unreadListener?.remove()
+            unreadListener = firestore.collection("chats")
+                .document(chatId)
+                .collection("messages")
+                .whereEqualTo("receiverId", currentUserId)
+                .whereEqualTo("isRead", false)
+                .addSnapshotListener { snapshot, _ ->
+                    val count = snapshot?.size() ?: 0
+                    if (count > 0) {
+                        tvUnreadCount.text = if (count > 99) "99+" else count.toString()
+                        tvUnreadCount.visibility = View.VISIBLE
+                    } else {
+                        tvUnreadCount.visibility = View.GONE
+                    }
+                }
         }
 
         private fun loadLastMessage(user: User) {
             val chatId = if (currentUserId < user.id) "$currentUserId-${user.id}" else "${user.id}-$currentUserId"
 
-            firestore.collection("chats")
+            lastMessageListener?.remove()
+
+            lastMessageListener = firestore.collection("chats")
                 .document(chatId)
                 .collection("messages")
                 .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
@@ -123,5 +151,15 @@ class UserAdapter(
                     }
                 }
         }
+
+        fun unbind() {
+            lastMessageListener?.remove()
+            unreadListener?.remove()
+        }
+    }
+
+    override fun onViewRecycled(holder: UserViewHolder) {
+        super.onViewRecycled(holder)
+        holder.unbind()
     }
 }
