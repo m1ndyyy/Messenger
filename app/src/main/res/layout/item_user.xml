@@ -16,24 +16,42 @@
         android:background="@drawable/bg_avatar_small"
         android:layout_marginEnd="12dp"/>
 
-    <!-- Левая часть -->
+    <!-- Левая часть: имя и последнее сообщение -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/tvName"
+        <!-- Строка: Имя + Статус (онлайн/оффлайн) -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Username"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="@color/text_primary"
-            android:maxLines="1"
-            android:ellipsize="end"/>
+            android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/tvName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Username"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:maxLines="1"
+                android:ellipsize="end"/>
+
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="14sp"
+                android:textColor="@color/green"
+                android:layout_marginStart="4dp"/>
+
+        </LinearLayout>
+
+        <!-- Последнее сообщение (без галочки) -->
         <TextView
             android:id="@+id/tvLastMessage"
             android:layout_width="match_parent"
@@ -45,23 +63,14 @@
             android:ellipsize="end"
             android:layout_marginTop="4dp"/>
 
-        <TextView
-            android:id="@+id/tvStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Онлайн"
-            android:textSize="14sp"
-            android:layout_marginTop="2dp"
-            android:textColor="@color/green"/>
-
     </LinearLayout>
 
     <!-- Правая часть: время + галочка/кружок -->
     <LinearLayout
         android:layout_width="wrap_content"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="top"
+        android:gravity="end"
         android:paddingStart="12dp">
 
         <!-- Время -->
@@ -73,7 +82,7 @@
             android:textSize="12sp"
             android:textColor="@color/gray"/>
 
-        <!-- Галочка (для своих сообщений) - на том же месте, что и кружок -->
+        <!-- Галочка (для своих сообщений) -->
         <TextView
             android:id="@+id/tvCheck"
             android:layout_width="wrap_content"
@@ -81,10 +90,10 @@
             android:text=""
             android:textSize="12sp"
             android:textColor="@color/green"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:visibility="gone"/>
 
-        <!-- Кружок для непрочитанных (для чужих сообщений) -->
+        <!-- Кружок непрочитанных (для чужих сообщений) -->
         <TextView
             android:id="@+id/tvUnreadCount"
             android:layout_width="wrap_content"
@@ -97,7 +106,7 @@
             android:textSize="11sp"
             android:textColor="@color/white"
             android:visibility="gone"
-            android:layout_marginTop="4dp"/>
+            android:layout_marginTop="2dp"/>
 
     </LinearLayout>
 

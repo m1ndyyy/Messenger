@@ -94,10 +94,10 @@ class UserAdapter(
                 .addSnapshotListener { snapshot, _ ->
                     val status = snapshot?.getString("status") ?: "offline"
                     if (status == "online") {
-                        tvStatus.text = "🟢 Онлайн"
+                        tvStatus.text = "🟢"
                         tvStatus.setTextColor(Color.parseColor("#4CAF50"))
                     } else {
-                        tvStatus.text = "⚫ Оффлайн"
+                        tvStatus.text = "⚫"
                         tvStatus.setTextColor(Color.parseColor("#9E9E9E"))
                     }
                 }

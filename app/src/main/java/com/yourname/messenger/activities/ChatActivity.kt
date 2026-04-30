@@ -102,10 +102,10 @@ class ChatActivity : AppCompatActivity() {
                     tvName.text = name
 
                     if (status == "online") {
-                        tvStatus.text = "🟢 Онлайн"
+                        tvStatus.text = "🟢"
                         tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_light))
                     } else {
-                        tvStatus.text = "⚫ Оффлайн"
+                        tvStatus.text = "⚫"
                         tvStatus.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
                     }
 

@@ -26,12 +26,13 @@
         android:background="@drawable/bg_avatar_small"
         android:layout_marginEnd="12dp"/>
 
-    <!-- Имя и статус -->
+    <!-- Имя и статус в одной строке (статус справа от имени) -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/tvChatName"
@@ -48,7 +49,8 @@
             android:layout_height="wrap_content"
             android:text=""
             android:textSize="12sp"
-            android:textColor="@color/white"/>
+            android:textColor="@color/white"
+            android:layout_marginStart="8dp"/>
 
     </LinearLayout>
 
