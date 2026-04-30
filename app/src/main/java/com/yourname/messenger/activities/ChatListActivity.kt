@@ -28,6 +28,7 @@ class ChatListActivity : AppCompatActivity() {
     private lateinit var etSearch: EditText
     private lateinit var adapter: UserAdapter
     private var menu: Menu? = null
+    private var isDataLoaded = false  // ← ФЛАГ: данные уже загружены
 
     private val allUsersList = mutableListOf<User>()
     private val filteredUsersList = mutableListOf<User>()
@@ -36,7 +37,6 @@ class ChatListActivity : AppCompatActivity() {
     private val currentUserId: String
         get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // ДЛЯ ПЛАВНОГО ОБНОВЛЕНИЯ
     private val handler = Handler(Looper.getMainLooper())
     private var updateRunnable: Runnable? = null
     private val UPDATE_DELAY = 200L
@@ -75,6 +75,13 @@ class ChatListActivity : AppCompatActivity() {
         loadUsers()
         setupSearch()
 
+        setUserStatus("online")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // НЕ перезагружаем данные при возврате из чата!
+        // Только обновляем статус
         setUserStatus("online")
     }
 
@@ -150,7 +157,7 @@ class ChatListActivity : AppCompatActivity() {
                     user?.let { newUsersList.add(it) }
                 }
 
-                // ПРОВЕРКА: если списки одинаковые — НЕ ОБНОВЛЯЕМ
+                // Если списки одинаковые — не обновляем
                 if (areListsEqual(allUsersList, newUsersList)) {
                     return@addSnapshotListener
                 }
@@ -161,16 +168,23 @@ class ChatListActivity : AppCompatActivity() {
                     isUpdating = true
                     allUsersList.clear()
                     allUsersList.addAll(newUsersList)
-                    filteredUsersList.clear()
-                    filteredUsersList.addAll(allUsersList)
-                    adapter.updateUsers(filteredUsersList)
+
+                    // Обновляем отфильтрованный список только если нет активного поиска
+                    if (etSearch.text.toString().isEmpty()) {
+                        filteredUsersList.clear()
+                        filteredUsersList.addAll(allUsersList)
+                        adapter.updateUsers(filteredUsersList)
+                    } else {
+                        // Если есть поиск — перефильтровываем
+                        filterUsers(etSearch.text.toString())
+                    }
                     isUpdating = false
+                    isDataLoaded = true
                 }
                 handler.postDelayed(updateRunnable!!, UPDATE_DELAY)
             }
     }
 
-    // Функция сравнения списков (чтобы не обновлять без изменений)
     private fun areListsEqual(oldList: List<User>, newList: List<User>): Boolean {
         if (oldList.size != newList.size) return false
         for (i in oldList.indices) {
