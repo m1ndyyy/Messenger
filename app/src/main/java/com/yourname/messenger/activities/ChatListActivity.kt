@@ -2,6 +2,8 @@ package com.yourname.messenger.activities
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Menu
@@ -29,9 +31,15 @@ class ChatListActivity : AppCompatActivity() {
 
     private val allUsersList = mutableListOf<User>()
     private val filteredUsersList = mutableListOf<User>()
+    private var isUpdating = false
 
     private val currentUserId: String
         get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+
+    // ДЛЯ ПЛАВНОГО ОБНОВЛЕНИЯ
+    private val handler = Handler(Looper.getMainLooper())
+    private var updateRunnable: Runnable? = null
+    private val UPDATE_DELAY = 200L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val isDark = loadThemePreference()
@@ -134,15 +142,43 @@ class ChatListActivity : AppCompatActivity() {
         firestore.collection("users")
             .whereNotEqualTo("id", currentUserId)
             .addSnapshotListener { snapshot, _ ->
-                allUsersList.clear()
-                snapshot?.documents?.forEach { document ->
+                if (snapshot == null || isUpdating) return@addSnapshotListener
+
+                val newUsersList = mutableListOf<User>()
+                snapshot.documents.forEach { document ->
                     val user = document.toObject(User::class.java)
-                    user?.let { allUsersList.add(it) }
+                    user?.let { newUsersList.add(it) }
                 }
-                filteredUsersList.clear()
-                filteredUsersList.addAll(allUsersList)
-                adapter.updateUsers(filteredUsersList)
+
+                // ПРОВЕРКА: если списки одинаковые — НЕ ОБНОВЛЯЕМ
+                if (areListsEqual(allUsersList, newUsersList)) {
+                    return@addSnapshotListener
+                }
+
+                // Откладываем обновление
+                updateRunnable?.let { handler.removeCallbacks(it) }
+                updateRunnable = Runnable {
+                    isUpdating = true
+                    allUsersList.clear()
+                    allUsersList.addAll(newUsersList)
+                    filteredUsersList.clear()
+                    filteredUsersList.addAll(allUsersList)
+                    adapter.updateUsers(filteredUsersList)
+                    isUpdating = false
+                }
+                handler.postDelayed(updateRunnable!!, UPDATE_DELAY)
             }
+    }
+
+    // Функция сравнения списков (чтобы не обновлять без изменений)
+    private fun areListsEqual(oldList: List<User>, newList: List<User>): Boolean {
+        if (oldList.size != newList.size) return false
+        for (i in oldList.indices) {
+            if (oldList[i].id != newList[i].id) return false
+            if (oldList[i].status != newList[i].status) return false
+            if (oldList[i].name != newList[i].name) return false
+        }
+        return true
     }
 
     private fun setupSearch() {
