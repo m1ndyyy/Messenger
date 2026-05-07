@@ -1,9 +1,10 @@
 package com.yourname.messenger.activities
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Menu
@@ -12,6 +13,8 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.auth.FirebaseAuth
@@ -28,18 +31,16 @@ class ChatListActivity : AppCompatActivity() {
     private lateinit var etSearch: EditText
     private lateinit var adapter: UserAdapter
     private var menu: Menu? = null
-    private var isDataLoaded = false  // ← ФЛАГ: данные уже загружены
 
     private val allUsersList = mutableListOf<User>()
     private val filteredUsersList = mutableListOf<User>()
-    private var isUpdating = false
 
     private val currentUserId: String
         get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    private val handler = Handler(Looper.getMainLooper())
-    private var updateRunnable: Runnable? = null
-    private val UPDATE_DELAY = 200L
+    companion object {
+        private const val REQUEST_PERMISSIONS = 100
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val isDark = loadThemePreference()
@@ -59,6 +60,9 @@ class ChatListActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
         firestore = FirebaseFirestore.getInstance()
 
+        // Запрашиваем разрешения при запуске
+        checkAndRequestPermissions()
+
         rvUsers = findViewById(R.id.rvUsers)
         etSearch = findViewById(R.id.etSearch)
 
@@ -74,15 +78,69 @@ class ChatListActivity : AppCompatActivity() {
 
         loadUsers()
         setupSearch()
-
-        setUserStatus("online")
     }
 
-    override fun onResume() {
-        super.onResume()
-        // НЕ перезагружаем данные при возврате из чата!
-        // Только обновляем статус
-        setUserStatus("online")
+    // Проверка и запрос разрешений (без диалогов)
+    private fun checkAndRequestPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        // 1. Уведомления для Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // 2. Микрофон (для голосовых сообщений)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+        }
+
+        // 3. Доступ к хранилищу для старых Android
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+
+        // 4. Доступ к медиафайлам для Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(Manifest.permission.READ_MEDIA_IMAGES)
+            }
+        }
+
+        // Запрашиваем разрешения (без объяснений и диалогов)
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                permissionsToRequest.toTypedArray(),
+                REQUEST_PERMISSIONS
+            )
+        }
+    }
+
+    // ❌ Убрали весь диалог - просто ничего не делаем
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Ничего не показываем, просто игнорируем
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -103,7 +161,6 @@ class ChatListActivity : AppCompatActivity() {
                 startActivity(Intent(this, ProfileActivity::class.java))
             }
             R.id.action_logout -> {
-                setUserStatus("offline")
                 auth.signOut()
                 startActivity(Intent(this, LoginActivity::class.java))
                 finish()
@@ -111,15 +168,16 @@ class ChatListActivity : AppCompatActivity() {
             }
             R.id.action_theme -> {
                 val isDark = !loadThemePreference()
+                saveThemePreference(isDark)
+
                 if (isDark) {
                     AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
-                    menu?.findItem(R.id.action_theme)?.title = "Светлая тема"
+                    item.title = "Светлая тема"
                 } else {
                     AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
-                    menu?.findItem(R.id.action_theme)?.title = "Тёмная тема"
+                    item.title = "Тёмная тема"
                 }
-                saveThemePreference(isDark)
-                recreate()
+                    recreate()
             }
         }
         return true
@@ -135,64 +193,19 @@ class ChatListActivity : AppCompatActivity() {
         return prefs.getBoolean("dark_theme", false)
     }
 
-    private fun setUserStatus(status: String) {
-        val userId = auth.currentUser?.uid ?: return
-        firestore.collection("users").document(userId)
-            .update("status", status)
-            .addOnFailureListener {
-                firestore.collection("users").document(userId)
-                    .set(hashMapOf("id" to userId, "status" to status))
-            }
-    }
-
     private fun loadUsers() {
         firestore.collection("users")
             .whereNotEqualTo("id", currentUserId)
             .addSnapshotListener { snapshot, _ ->
-                if (snapshot == null || isUpdating) return@addSnapshotListener
-
-                val newUsersList = mutableListOf<User>()
-                snapshot.documents.forEach { document ->
+                allUsersList.clear()
+                snapshot?.documents?.forEach { document ->
                     val user = document.toObject(User::class.java)
-                    user?.let { newUsersList.add(it) }
+                    user?.let { allUsersList.add(it) }
                 }
-
-                // Если списки одинаковые — не обновляем
-                if (areListsEqual(allUsersList, newUsersList)) {
-                    return@addSnapshotListener
-                }
-
-                // Откладываем обновление
-                updateRunnable?.let { handler.removeCallbacks(it) }
-                updateRunnable = Runnable {
-                    isUpdating = true
-                    allUsersList.clear()
-                    allUsersList.addAll(newUsersList)
-
-                    // Обновляем отфильтрованный список только если нет активного поиска
-                    if (etSearch.text.toString().isEmpty()) {
-                        filteredUsersList.clear()
-                        filteredUsersList.addAll(allUsersList)
-                        adapter.updateUsers(filteredUsersList)
-                    } else {
-                        // Если есть поиск — перефильтровываем
-                        filterUsers(etSearch.text.toString())
-                    }
-                    isUpdating = false
-                    isDataLoaded = true
-                }
-                handler.postDelayed(updateRunnable!!, UPDATE_DELAY)
+                filteredUsersList.clear()
+                filteredUsersList.addAll(allUsersList)
+                adapter.updateUsers(filteredUsersList)
             }
-    }
-
-    private fun areListsEqual(oldList: List<User>, newList: List<User>): Boolean {
-        if (oldList.size != newList.size) return false
-        for (i in oldList.indices) {
-            if (oldList[i].id != newList[i].id) return false
-            if (oldList[i].status != newList[i].status) return false
-            if (oldList[i].name != newList[i].name) return false
-        }
-        return true
     }
 
     private fun setupSearch() {

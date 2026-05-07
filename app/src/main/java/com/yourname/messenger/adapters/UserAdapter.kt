@@ -1,6 +1,8 @@
 package com.yourname.messenger.adapters
 
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -8,6 +10,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -24,6 +27,10 @@ class UserAdapter(
 
     private val firestore = FirebaseFirestore.getInstance()
     private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    private val avatarCache = mutableMapOf<String, String>()
+
+    private val offlineHandlers = mutableMapOf<String, Handler>()
+    private val offlineTasks = mutableMapOf<String, Runnable>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): UserViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_user, parent, false)
@@ -66,48 +73,93 @@ class UserAdapter(
         private val tvTime: TextView = itemView.findViewById(R.id.tvTime)
         private val tvUnreadCount: TextView = itemView.findViewById(R.id.tvUnreadCount)
 
+        private var statusListener: ListenerRegistration? = null
         private var lastMessageListener: ListenerRegistration? = null
         private var unreadListener: ListenerRegistration? = null
+        private var currentUserIdForTimer: String? = null
 
         fun bind(user: User) {
             tvName.text = user.name
+            currentUserIdForTimer = user.id
 
-            // ЗАГРУЗКА АВАТАРКИ (ПРОСТАЯ РАБОЧАЯ ВЕРСИЯ)
-            if (user.avatarUrl.isNotEmpty()) {
-                try {
-                    val urlWithTimestamp = user.avatarUrl + "?t=" + System.currentTimeMillis()
-                    Glide.with(itemView.context)
-                        .load(urlWithTimestamp)
-                        .circleCrop()
-                        .placeholder(R.drawable.ic_default_avatar)
-                        .error(R.drawable.ic_default_avatar)
-                        .into(ivAvatar)
-                } catch (e: Exception) {
-                    ivAvatar.setImageResource(R.drawable.ic_default_avatar)
-                }
-            } else {
-                ivAvatar.setImageResource(R.drawable.ic_default_avatar)
-            }
+            loadAvatarWithCache(user)
 
-            // Статус онлайн/оффлайн
-            firestore.collection("users").document(user.id)
+            statusListener?.remove()
+            statusListener = firestore.collection("users").document(user.id)
                 .addSnapshotListener { snapshot, _ ->
                     val status = snapshot?.getString("status") ?: "offline"
+
                     if (status == "online") {
+                        cancelOfflineTimer(user.id)
                         tvStatus.text = "🟢"
                         tvStatus.setTextColor(Color.parseColor("#4CAF50"))
                     } else {
-                        tvStatus.text = "⚫"
-                        tvStatus.setTextColor(Color.parseColor("#9E9E9E"))
+                        scheduleOfflineStatus(user.id)
                     }
                 }
 
-            // Загружаем последнее сообщение
             loadLastMessage(user)
-            // Загружаем количество непрочитанных
             loadUnreadCount(user)
 
             itemView.setOnClickListener { onUserClick(user) }
+        }
+
+        private fun cancelOfflineTimer(userId: String) {
+            val handler = offlineHandlers[userId]
+            val task = offlineTasks[userId]
+
+            if (handler != null && task != null) {
+                handler.removeCallbacks(task)
+            }
+
+            offlineHandlers.remove(userId)
+            offlineTasks.remove(userId)
+        }
+
+        // ✅ ЗАДЕРЖКА 100мс
+        private fun scheduleOfflineStatus(userId: String) {
+            if (offlineHandlers.containsKey(userId)) {
+                return
+            }
+
+            val handler = Handler(Looper.getMainLooper())
+            val task = Runnable {
+                if (currentUserIdForTimer == userId && offlineHandlers.containsKey(userId)) {
+                    tvStatus.text = "⚫"
+                    tvStatus.setTextColor(Color.parseColor("#9E9E9E"))
+                    offlineHandlers.remove(userId)
+                    offlineTasks.remove(userId)
+                }
+            }
+
+            offlineHandlers[userId] = handler
+            offlineTasks[userId] = task
+            handler.postDelayed(task, 100) // ✅ 100 миллисекунд
+        }
+
+        private fun loadAvatarWithCache(user: User) {
+            val avatarUrl = user.avatarUrl
+
+            if (avatarUrl.isNotEmpty()) {
+                val cachedUrl = avatarCache[user.id]
+
+                if (cachedUrl == avatarUrl) {
+                    return
+                }
+
+                avatarCache[user.id] = avatarUrl
+
+                Glide.with(itemView.context)
+                    .load(avatarUrl)
+                    .circleCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .skipMemoryCache(false)
+                    .placeholder(R.drawable.ic_default_avatar)
+                    .error(R.drawable.ic_default_avatar)
+                    .into(ivAvatar)
+            } else {
+                ivAvatar.setImageResource(R.drawable.ic_default_avatar)
+            }
         }
 
         private fun loadUnreadCount(user: User) {
@@ -176,6 +228,11 @@ class UserAdapter(
         }
 
         fun unbind() {
+            currentUserIdForTimer?.let { userId ->
+                cancelOfflineTimer(userId)
+            }
+
+            statusListener?.remove()
             lastMessageListener?.remove()
             unreadListener?.remove()
         }

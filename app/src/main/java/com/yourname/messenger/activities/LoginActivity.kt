@@ -3,16 +3,13 @@ package com.yourname.messenger.activities
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -37,7 +34,6 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var tilName: android.view.View
 
-    // Код запроса разрешений
     companion object {
         private const val REQUEST_PERMISSIONS = 100
     }
@@ -82,11 +78,11 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    // Проверка и запрос всех необходимых разрешений
+    // Проверка и запрос разрешений (без диалогов)
     private fun checkAndRequestPermissions() {
         val permissionsToRequest = mutableListOf<String>()
 
-        // Для Android 13+ (Tiramisu) запрашиваем уведомления
+        // 1. Уведомления для Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED
@@ -95,16 +91,28 @@ class LoginActivity : AppCompatActivity() {
             }
         }
 
-        // Для Android 11 и ниже запрашиваем доступ к хранилищу
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+        // 2. Микрофон (для голосовых сообщений)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+        }
+
+        // 3. Доступ к хранилищу для старых Android
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                 != PackageManager.PERMISSION_GRANTED
             ) {
                 permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionsToRequest.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
         }
 
-        // Для Android 13+ запрашиваем доступ к медиафайлам (для аватарок)
+        // 4. Доступ к медиафайлам для Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
                 != PackageManager.PERMISSION_GRANTED
@@ -113,6 +121,7 @@ class LoginActivity : AppCompatActivity() {
             }
         }
 
+        // Запрашиваем разрешения (без объяснений и диалогов)
         if (permissionsToRequest.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                 this,
@@ -122,53 +131,14 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    // Обработка результата запроса разрешений
+    // ❌ Убрали весь диалог - просто ничего не делаем
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == REQUEST_PERMISSIONS) {
-            val deniedPermissions = mutableListOf<String>()
-            for (i in permissions.indices) {
-                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
-                    deniedPermissions.add(permissions[i])
-                }
-            }
-
-            if (deniedPermissions.isNotEmpty()) {
-                showPermissionDeniedDialog(deniedPermissions)
-            }
-        }
-    }
-
-    // Показать диалог, если разрешения отклонены
-    private fun showPermissionDeniedDialog(deniedPermissions: List<String>) {
-        val message = StringBuilder()
-        for (permission in deniedPermissions) {
-            when (permission) {
-                Manifest.permission.POST_NOTIFICATIONS -> {
-                    message.append("• Уведомления (для получения оповещений о сообщениях)\n")
-                }
-                Manifest.permission.READ_EXTERNAL_STORAGE,
-                Manifest.permission.READ_MEDIA_IMAGES -> {
-                    message.append("• Доступ к хранилищу (для загрузки аватарок)\n")
-                }
-            }
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("Необходимы разрешения")
-            .setMessage("Для полноценной работы приложения необходимы следующие разрешения:\n\n$message\nПожалуйста, предоставьте их в настройках.")
-            .setPositiveButton("Открыть настройки") { _, _ ->
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                intent.data = Uri.parse("package:$packageName")
-                startActivity(intent)
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
+        // Ничего не показываем, просто игнорируем
     }
 
     private fun loginUser() {
@@ -193,7 +163,6 @@ class LoginActivity : AppCompatActivity() {
             }
     }
 
-    // Функция проверки email (только латиница, цифры, . - _ @)
     private fun isValidEmail(email: String): Boolean {
         val emailPattern = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
         return emailPattern.matcher(email).matches()
@@ -264,8 +233,6 @@ class LoginActivity : AppCompatActivity() {
                                 .set(hashMapOf("fcmToken" to token), com.google.firebase.firestore.SetOptions.merge())
                         }
                 }
-            } else {
-                // Токен не получен, но приложение продолжит работу
             }
         }
     }
