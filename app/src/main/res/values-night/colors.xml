@@ -35,8 +35,14 @@
     <color name="gray">#B0B0B0</color>
     <color name="gray_light">#2A3A44</color>
 
+
     <color name="white">#FFFFFF</color>
     <color name="black">#E0E0E0</color>
+    <color name="highlight_color">#40FFEB3B</color>
+
+
+    <color name="reply_border_dark">#64B5F6</color>
+    <color name="reply_bg_dark">#2C2C2C</color>
 
     <color name="dark_pastel_blue">#2C4A5A</color>
     <color name="dark_pastel_blue_dark">#1E3A4A</color>
@@ -47,4 +53,10 @@
     <color name="dark_text_primary">#FFFFFF</color>
     <color name="dark_text_secondary">#C0C0C0</color>
     <color name="dark_text_hint">#A0A0A0</color>
+    <!-- Добавьте в конец файла -->
+    <color name="quote_sender">#64B5F6</color>
+    <color name="quote_text">#AAAAAA</color>
+    <color name="quote_sender_outgoing">#FFFFFF</color>
+    <color name="quote_text_outgoing">#DDDDDD</color>
+
 </resources>

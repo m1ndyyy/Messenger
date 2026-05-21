@@ -3,6 +3,9 @@ package com.yourname.messenger.activities
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.View
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -47,6 +50,9 @@ class ChatActivity : AppCompatActivity() {
     private val currentUserId = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     private val markedAsRead = mutableSetOf<String>()
+
+    // Для ответа на сообщение
+    private var replyToMessage: Message? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,7 +132,16 @@ class ChatActivity : AppCompatActivity() {
         btnScrollToBottom = findViewById(R.id.btnScrollToBottom)
 
         rvMessages.layoutManager = LinearLayoutManager(this)
-        adapter = MessageAdapter(messagesList, currentUserId)
+
+        // Создаем адаптер
+        adapter = MessageAdapter(
+            messagesList,
+            currentUserId,
+            currentChatId,
+            { loadMessages() },  // onMessageEdited
+            { message -> showReplyInput(message) },  // onMessageReplied
+            { messageId -> scrollToMessage(messageId) }  // onMessageClicked
+        )
         rvMessages.adapter = adapter
 
         loadMessages()
@@ -142,9 +157,9 @@ class ChatActivity : AppCompatActivity() {
                 val isAtBottom = lastVisible >= messagesList.size - 1
 
                 if (isAtBottom) {
-                    btnScrollToBottom.visibility = android.view.View.GONE
+                    btnScrollToBottom.visibility = View.GONE
                 } else {
-                    btnScrollToBottom.visibility = android.view.View.VISIBLE
+                    btnScrollToBottom.visibility = View.VISIBLE
                 }
             }
 
@@ -154,7 +169,6 @@ class ChatActivity : AppCompatActivity() {
                     markVisibleMessagesAsRead()
                     checkIfAtBottom()
                     isUserScrolling = false
-                    // Сохраняем позицию при остановке скролла
                     saveScrollPosition()
                 }
             }
@@ -163,7 +177,7 @@ class ChatActivity : AppCompatActivity() {
         btnScrollToBottom.setOnClickListener {
             if (messagesList.isNotEmpty()) {
                 rvMessages.smoothScrollToPosition(messagesList.size - 1)
-                btnScrollToBottom.visibility = android.view.View.GONE
+                btnScrollToBottom.visibility = View.GONE
             }
         }
 
@@ -223,7 +237,6 @@ class ChatActivity : AppCompatActivity() {
                     val savedPosition = getSavedPosition()
                     val savedOffset = getSavedOffset()
 
-                    // Если есть сохраненная позиция и она валидна
                     if (savedPosition != -1 && savedPosition < messagesList.size) {
                         rvMessages.layoutManager?.scrollToPosition(savedPosition)
                         rvMessages.post {
@@ -233,15 +246,13 @@ class ChatActivity : AppCompatActivity() {
                             }
                         }
                     } else {
-                        // Нет сохраненной позиции - скроллим вниз
                         rvMessages.scrollToPosition(messagesList.size - 1)
                     }
                     isFirstLoad = false
                 } else {
-                    // Обычное поведение: прокручиваем только если пользователь был внизу
                     if (wasAtBottomBefore && messagesList.size > oldSize && messagesList.isNotEmpty()) {
                         rvMessages.scrollToPosition(messagesList.size - 1)
-                        btnScrollToBottom.visibility = android.view.View.GONE
+                        btnScrollToBottom.visibility = View.GONE
                     }
                 }
 
@@ -284,6 +295,24 @@ class ChatActivity : AppCompatActivity() {
             .update("isRead", true)
     }
 
+    private fun showReplyInput(message: Message) {
+        replyToMessage = message
+        val senderName = if (message.senderId == currentUserId) "Вы" else receiverName
+        etMessage.hint = "Ответ $senderName..."
+
+        val btnCancelReply = findViewById<ImageButton>(R.id.btnCancelReply)
+        btnCancelReply?.visibility = View.VISIBLE
+        btnCancelReply?.setOnClickListener {
+            cancelReply()
+        }
+    }
+
+    private fun cancelReply() {
+        replyToMessage = null
+        etMessage.hint = "Сообщение"
+        findViewById<ImageButton>(R.id.btnCancelReply)?.visibility = View.GONE
+    }
+
     private fun sendMessage() {
         val text = etMessage.text.toString().trim()
         if (text.isEmpty()) return
@@ -291,14 +320,28 @@ class ChatActivity : AppCompatActivity() {
         val messageId = UUID.randomUUID().toString()
         val chatId = if (currentUserId < receiverId) "$currentUserId-$receiverId" else "$receiverId-$currentUserId"
 
-        val messageMap = hashMapOf(
+        val messageMap = mutableMapOf<String, Any>(
             "id" to messageId,
             "senderId" to currentUserId,
             "receiverId" to receiverId,
             "text" to text,
             "timestamp" to FieldValue.serverTimestamp(),
-            "isRead" to false
+            "isRead" to false,
+            "isEdited" to false,
+            "isLiked" to false,
+            "isDeleted" to false,
+            "isForwarded" to false,
+            "forwardedFrom" to "",
+            "senderName" to receiverName
         )
+
+        // Добавляем информацию об ответе, если есть
+        if (replyToMessage != null) {
+            messageMap["replyToId"] = replyToMessage!!.id
+            messageMap["replyToText"] = replyToMessage!!.text
+            messageMap["replyToSenderName"] = if (replyToMessage!!.senderId == currentUserId) "Вы" else receiverName
+            cancelReply()
+        }
 
         firestore.collection("chats")
             .document(chatId)
@@ -309,12 +352,40 @@ class ChatActivity : AppCompatActivity() {
                 etMessage.text.clear()
                 if (wasAtBottom) {
                     rvMessages.scrollToPosition(messagesList.size)
-                    btnScrollToBottom.visibility = android.view.View.GONE
+                    btnScrollToBottom.visibility = View.GONE
                 }
             }
             .addOnFailureListener {
                 Toast.makeText(this, "Ошибка отправки", Toast.LENGTH_SHORT).show()
             }
+    }
+
+    private fun scrollToMessage(messageId: String) {
+        val position = messagesList.indexOfFirst { it.id == messageId }
+        if (position != -1) {
+            val recyclerViewHeight = rvMessages.height
+            rvMessages.scrollToPosition(position)
+
+            rvMessages.postDelayed({
+                val holder = rvMessages.findViewHolderForAdapterPosition(position)
+                val viewHeight = holder?.itemView?.height ?: 200
+                val offset = (recyclerViewHeight / 2) - (viewHeight / 2)
+                (rvMessages.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(position, offset)
+
+                if (holder != null) {
+                    holder.itemView.setBackgroundColor(ContextCompat.getColor(this, R.color.highlight_color))
+                    holder.itemView.animate()?.scaleX(1.03f)?.scaleY(1.03f)?.setDuration(100)?.withEndAction {
+                        holder.itemView.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(100)?.start()
+                    }?.start()
+
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        holder.itemView.setBackgroundColor(0)
+                    }, 1000)
+                }
+            }, 100)
+        } else {
+            Toast.makeText(this, "Сообщение не найдено", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDestroy() {
